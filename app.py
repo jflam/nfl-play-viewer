@@ -4,9 +4,9 @@ import streamlit.components.v1 as components
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-from matplotlib.animation import FuncAnimation
+from matplotlib.animation import FuncAnimation, FFMpegWriter
 
-TEMP_ANIMATION_FILENAME = "game_animation.html"
+TEMP_ANIMATION_VIDEO = "game_animation.mp4"
 
 st.write("# NFL Game Play Analysis")
 st.write("## Games")
@@ -116,31 +116,38 @@ def plot_tick(ax, play):
         elif row['team'] == 'football':
             ax.plot(row['x'], row['y'], linestyle='None',marker='o', mfc='#E89B00',mec='#E89B00', label = 'Football', zorder=3)
 
-def plot_animation_play(df_events, fig, ax):
-    """Plot the animation for a single play"""
+def plot_video_play(df_events):
+    """Generate a video of the animated play"""
+    fig, ax = plt.subplots(figsize=(12, 7), dpi=1024/16) 
     generate_field(ax)
     def plot_play(df_play):
+        """Plot the positions of all players. The func is passed a tuple 
+of the playId and the play dataframe"""
         plot_tick(ax, df_play[1])
 
+    # Create a video of the play and write to disk as TEMP_ANIMATION_VIDEO
     anim = FuncAnimation(fig, plot_play, frames=df_events, interval=100)
+    ffmpeg_writer = FFMpegWriter(fps=10, bitrate=1800)
+    anim.save(TEMP_ANIMATION_VIDEO, writer=ffmpeg_writer)
 
-    with open(TEMP_ANIMATION_FILENAME, "w") as f:
-        print(anim.to_html5_video(), file=f)
+    # Read bytes from animation video and send to streamlit for rendering
+    with open(TEMP_ANIMATION_VIDEO, 'rb') as f:
+        video_bytes = f.read()
+        st.video(video_bytes)
 
-    HtmlFile = open(TEMP_ANIMATION_FILENAME, "r")
-    source_code = HtmlFile.read() 
-    components.html(source_code, height = 900,width=1900)
-
-def plot_static_play(df_events, fig, ax):
+def plot_static_play(df_events):
     """Plot the static image for a single play"""
+    fig, ax = plt.subplots(figsize=(16, 9), dpi=1024/16) 
     generate_field(ax)
     for _, play in df_events:
         plot_tick(ax, play)
     st.pyplot(fig)
 
-fig, ax = plt.subplots(figsize=(14, 6.5)) 
 df_play_ticks = df_plays.groupby("time")
-plot_static_play(df_play_ticks, fig, ax)
 
-fig, ax = plt.subplots(figsize=(14, 6.5)) 
-plot_animation_play(df_play_ticks, fig, ax)
+st.write("## Play")
+plot_static_play(df_play_ticks)
+
+st.write("## Play animation")
+with st.spinner("Generating animation..."):
+    plot_video_play(df_play_ticks)
